@@ -15,3 +15,6 @@ export function connectToWS(boardID) {
     };
   }
   
+  export function connectToWS(boardID) {
+    const socket = new WebSocket(`wss://your-backend.onrender.com/${boardID}`);
+  }

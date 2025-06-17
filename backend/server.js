@@ -3,7 +3,13 @@ const http = require('http');
 const WebSocket = require('ws');
 const url = require('url');
 
-const server = http.createServer();
+const PORT = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('WebSocket server is running.');
+});
+
 const wss = new WebSocket.Server({ server });
 
 const rooms = new Map(); // boardID -> Set of clients
@@ -29,4 +35,6 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-server.listen(3001, () => console.log('WebSocket server running on ws://localhost:3001'));
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
