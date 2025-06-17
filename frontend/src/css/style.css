@@ -1,0 +1,171 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+  }
+  
+  body {
+    background: #f8f6f3;
+    color: #3e2723;
+    /* display: flex; */
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+  }
+  
+  .container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+  }
+  
+  /* Header - Clean, Modern */
+  header {
+    /* background: #d4c8be; */
+    padding: 2rem 2rem;
+    text-align: center;
+    color: #acac92;
+    flex-shrink: 0;
+  }
+  
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.5px;
+  }
+  
+  header p {
+    font-size: 1rem;
+  }
+  
+  /* Canvas Section */
+  .drawing-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  
+  .drawing-canvas {
+    background: #ffffff;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+  
+  /* Sticky Notes (can appear over canvas) */
+  .sticky-notes {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  
+  /* Sticky Note Style */
+  .sticky-note {
+    background-color: #fff59d;
+    padding: 10px;
+    border-radius: 8px;
+    width: 180px;
+    min-height: 140px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+    position: absolute;
+    cursor: grab;
+  }
+  
+  .sticky-note textarea {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: none;
+    font-size: 1rem;
+    color: #333;
+    resize: none;
+    outline: none;
+  }
+  
+  /* Buttons */
+  .btn {
+    background-color:  #acac92;
+    color: white;
+    border: none;
+    padding: 0.7rem 1.5rem;
+    font-size: 1rem;
+    border-radius: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+  }
+  
+  .btn:hover {
+    background-color:  #9b9b7b;
+    transform: translateY(-1px);
+  }
+  
+  .btn.active {
+    background-color: #9b9b7b;
+    color: #3e2723;
+  }
+  
+  /* Buttons Positioned Bottom Center */
+  #startDrawingBtn, #addNoteBtn {
+    position: absolute;
+    bottom: 20px;
+  }
+  
+  #startDrawingBtn {
+    left: 50%;
+    transform: translateX(-120%);
+  }
+  
+  #addNoteBtn {
+    left: 50%;
+    transform: translateX(20%);
+  }
+  
+  /* Footer */
+  footer {
+    background: #5d4037;
+    color: rgba(255, 255, 255, 0.75);
+    text-align: center;
+    padding: 0.8rem;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Responsive for Mobile */
+  @media (max-width: 768px) {
+    header h1 {
+      font-size: 1.7rem;
+    }
+  
+    header p {
+      font-size: 0.95rem;
+    }
+  
+    .btn {
+      width: 90%;
+      max-width: 300px;
+      margin: 0.5rem auto;
+      justify-content: center;
+    }
+  
+    #startDrawingBtn, #addNoteBtn {
+      position: static;
+      transform: none;
+      margin-top: 1rem;
+    }
+  
+    .drawing-container {
+      padding-bottom: 3rem;
+    }
+  }
+  
