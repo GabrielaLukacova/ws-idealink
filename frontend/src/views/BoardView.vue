@@ -11,46 +11,33 @@
       </div>
     </header>
 
-    <div class="drawing-wrapper" style="position: relative;">
+    <div class="drawing-wrapper">
       <canvas
         id="drawingCanvas"
         ref="drawingCanvas"
         width="1200"
         height="600"
         class="drawing-canvas"
-        style="border:1px solid #ccc; display: block;"
       ></canvas>
 
-      <div id="stickyNotes" class="sticky-notes" style="position: absolute; top:0; left:0; width:100%; height:100%;">
+      <div id="stickyNotes" class="sticky-notes">
         <div
           v-for="(note, index) in stickyNotes"
           :key="note.id"
           class="sticky-note"
-          :style="{
-            position: 'absolute',
-            top: note.top + 'px',
-            left: note.left + 'px',
-            cursor: 'move',
-            background: '#fffec8',
-            padding: '8px',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            minWidth: '150px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
-          }"
+          :style="{ top: note.top + 'px', left: note.left + 'px' }"
           @mousedown="startDrag(note, $event)"
         >
           <textarea
             v-model="note.text"
             placeholder="Write your note here..."
             @input="onStickyNoteChange(index)"
-            style="width: 100%; height: 80px; border:none; background: transparent; resize:none; outline:none; font-family: Arial, sans-serif;"
           ></textarea>
         </div>
       </div>
     </div>
 
-    <div class="bottom-buttons fixed-buttons" style="margin-top: 10px;">
+    <div class="bottom-buttons fixed-buttons">
       <button class="btn" @click="toggleDrawing">
         <span>✏️</span>
         {{ isDrawingEnabled ? 'Stop drawing' : 'Start drawing' }}

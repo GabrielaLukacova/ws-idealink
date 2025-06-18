@@ -44,7 +44,7 @@ wss.on('connection', (ws, req) => {
     paths: state.paths
   }))
 
-  console.log(`[WS] Connected to board: ${boardID}`)
+  console.log(`[WS] Connected to board: ${boardId.value}`) 
 
   ws.isAlive = true
   ws.on('pong', () => { ws.isAlive = true })
