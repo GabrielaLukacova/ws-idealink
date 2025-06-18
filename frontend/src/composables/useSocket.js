@@ -11,7 +11,7 @@ const boardId = route.params.boardID || 'default-board'
 
 export function useSocket() {
   if (!socket.value) {
-    const wsConnection = connectToWS(boardId, (data) => {
+    const wsConnection = connectToWS(boardId.value, (data) => {
       // You can handle any global incoming WS data here if needed
       console.log('[useSocket] WS data received:', data)
     })

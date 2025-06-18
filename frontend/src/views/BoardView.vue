@@ -71,7 +71,7 @@ const { stickyNotes, addStickyNote, updateStickyNote, resetNotes } = useStickyNo
 let dragNote = null
 let dragOffset = { x: 0, y: 0 }
 let ws = null
-let sendWS = null
+let sendWS = () => {} // default noop function
 
 watch(boardId, () => {
   if (ctx) ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
@@ -115,7 +115,7 @@ function startPath(event) {
   ctx.beginPath()
   ctx.moveTo(x, y)
   paths.value.push([{ x, y }])
-  sendWS?.({ type: 'startDrawing', x, y, boardId: boardId.value })
+  sendWS({ type: 'startDrawing', x, y, boardId: boardId.value })
 }
 
 function draw(event) {
@@ -124,12 +124,12 @@ function draw(event) {
   ctx.lineTo(x, y)
   ctx.stroke()
   paths.value[paths.value.length - 1].push({ x, y })
-  sendWS?.({ type: 'drawing', x, y, boardId: boardId.value })
+  sendWS({ type: 'drawing', x, y, boardId: boardId.value })
 }
 
 function endDrawing() {
   isDrawing.value = false
-  sendWS?.({ type: 'endDrawing', boardId: boardId.value })
+  sendWS({ type: 'endDrawing', boardId: boardId.value })
 }
 
 function createNewBoard() {
@@ -150,11 +150,11 @@ function addStickyNoteLocal() {
     left: 50
   }
   addStickyNote(newNote)
-  sendWS?.({ type: 'addSticky', note: newNote, boardId: boardId.value })
+  sendWS({ type: 'addSticky', note: newNote, boardId: boardId.value })
 }
 
 function onStickyNoteChange(index) {
-  sendWS?.({ type: 'updateSticky', note: stickyNotes.value[index], boardId: boardId.value })
+  sendWS({ type: 'updateSticky', note: stickyNotes.value[index], boardId: boardId.value })
 }
 
 function startDrag(note, event) {
@@ -171,7 +171,7 @@ function drag(event) {
   dragNote.top = event.clientY - dragOffset.y
   const idx = stickyNotes.value.findIndex(n => n.id === dragNote.id)
   if (idx !== -1) updateStickyNote(idx, { top: dragNote.top, left: dragNote.left })
-  sendWS?.({ type: 'updateSticky', note: dragNote, boardId: boardId.value })
+  sendWS({ type: 'updateSticky', note: dragNote, boardId: boardId.value })
 }
 
 function stopDrag() {
@@ -185,6 +185,7 @@ function handleWSMessage(data) {
   switch (data.type) {
     case 'fullState':
       stickyNotes.value.splice(0, stickyNotes.value.length, ...data.notes)
+      paths.value = data.paths || []
       if (ctx && data.paths) {
         ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
         data.paths.forEach(path => {
@@ -225,6 +226,8 @@ onBeforeUnmount(() => {
   if (ws) ws.close()
 })
 </script>
+
+
 
 
 <style scoped>

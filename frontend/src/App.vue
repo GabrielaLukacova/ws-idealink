@@ -31,7 +31,7 @@ function handleWSMessage(message) {
 }
 
 // onMounted(() => {
-//   const { send } = connectToWS(boardID, handleWSMessage);
+//   const { send } = connectToWS(boardId.value, handleWSMessage);
 
 //   initDrawing(send);
 // });

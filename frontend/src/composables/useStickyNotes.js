@@ -13,7 +13,6 @@ export function useStickyNotes(boardId) {
     if (!data || data.boardId !== boardId) return
 
     if (data.type === 'stickyNoteCreated') {
-      // Avoid adding duplicate notes
       if (!stickyNotes.value.find(n => n.id === data.note.id)) {
         stickyNotes.value.push(data.note)
       }
@@ -22,16 +21,15 @@ export function useStickyNotes(boardId) {
       if (note) {
         note.left = data.note.left
         note.top = data.note.top
+        note.text = data.note.text || note.text
       }
     }
   }
 
   onMounted(() => {
-    const { socket, send } = connectToWS(boardId, onMessage)
+    const { socket, send } = connectToWS(boardId.value, onMessage)
     wsSend = send
     wsSocket = socket
-
-    // Optional: handle socket close/reconnect here if needed
   })
 
   onUnmounted(() => {
@@ -40,20 +38,30 @@ export function useStickyNotes(boardId) {
     }
   })
 
-  function addStickyNote() {
-    const note = {
+  function addStickyNote(note = null) {
+    const newNote = note || {
       id: crypto.randomUUID(),
       text: '',
       top: 100,
       left: 100
     }
-    stickyNotes.value.push(note)
 
-    wsSend && wsSend({
-      type: 'stickyNoteCreated',
-      boardId,
-      note
-    })
+    stickyNotes.value.push(newNote)
+
+    if (!note && wsSend) {
+      wsSend({
+        type: 'stickyNoteCreated',
+        boardId,
+        note: newNote
+      })
+    }
+  }
+
+  function updateStickyNote(index, changes) {
+    const note = stickyNotes.value[index]
+    if (note) {
+      Object.assign(note, changes)
+    }
   }
 
   function startDrag(note, event) {
@@ -70,7 +78,8 @@ export function useStickyNotes(boardId) {
         note: {
           id: note.id,
           left: note.left,
-          top: note.top
+          top: note.top,
+          text: note.text
         }
       })
     }
@@ -84,9 +93,15 @@ export function useStickyNotes(boardId) {
     document.addEventListener('mouseup', stopDragging)
   }
 
+  function resetNotes() {
+    stickyNotes.value = []
+  }
+
   return {
     stickyNotes,
     addStickyNote,
-    startDrag
+    updateStickyNote,
+    startDrag,
+    resetNotes
   }
 }
