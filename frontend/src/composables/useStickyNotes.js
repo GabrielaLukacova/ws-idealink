@@ -1,13 +1,45 @@
-/* src/composables/useStickyNotes.js */
-import { ref } from 'vue'
-import { useSocket } from './useSocket'
+// src/composables/useStickyNotes.js
+import { ref, onMounted, onUnmounted } from 'vue'
+import { connectToWS } from '@/sockets/ws-client'
 
-export function useStickyNotes() {
+export function useStickyNotes(boardId) {
   const stickyNotes = ref([])
 
-  const { socket, boardId } = useSocket()
+  let wsSend = null
+  let wsSocket = null
 
-  // Add new sticky note and emit to other clients
+  // Handle messages from WS
+  function onMessage(data) {
+    if (!data || data.boardId !== boardId) return
+
+    if (data.type === 'stickyNoteCreated') {
+      // Avoid adding duplicate notes
+      if (!stickyNotes.value.find(n => n.id === data.note.id)) {
+        stickyNotes.value.push(data.note)
+      }
+    } else if (data.type === 'updateSticky') {
+      const note = stickyNotes.value.find(n => n.id === data.note.id)
+      if (note) {
+        note.left = data.note.left
+        note.top = data.note.top
+      }
+    }
+  }
+
+  onMounted(() => {
+    const { socket, send } = connectToWS(boardId, onMessage)
+    wsSend = send
+    wsSocket = socket
+
+    // Optional: handle socket close/reconnect here if needed
+  })
+
+  onUnmounted(() => {
+    if (wsSocket) {
+      wsSocket.close()
+    }
+  })
+
   function addStickyNote() {
     const note = {
       id: crypto.randomUUID(),
@@ -15,16 +47,15 @@ export function useStickyNotes() {
       top: 100,
       left: 100
     }
-
     stickyNotes.value.push(note)
 
-    socket.value.emit('stickyNoteCreated', {
-      boardId: boardId.value,
+    wsSend && wsSend({
+      type: 'stickyNoteCreated',
+      boardId,
       note
     })
   }
 
-  // Start dragging a sticky note
   function startDrag(note, event) {
     const offsetX = event.clientX - note.left
     const offsetY = event.clientY - note.top
@@ -33,9 +64,9 @@ export function useStickyNotes() {
       note.left = moveEvent.clientX - offsetX
       note.top = moveEvent.clientY - offsetY
 
-      // Emit position while dragging
-      socket.value.emit('updateSticky', {
-        boardId: boardId.value,
+      wsSend && wsSend({
+        type: 'updateSticky',
+        boardId,
         note: {
           id: note.id,
           left: note.left,
@@ -52,25 +83,6 @@ export function useStickyNotes() {
     document.addEventListener('mousemove', moveNote)
     document.addEventListener('mouseup', stopDragging)
   }
-
-  // Receive a new sticky note from another user
-  function onStickyNoteCreated(data) {
-    if (data.boardId !== boardId.value) return
-    stickyNotes.value.push(data.note)
-  }
-
-  // Update sticky note position from other clients
-  function onUpdateSticky(data) {
-    if (data.boardId !== boardId.value) return
-    const note = stickyNotes.value.find(n => n.id === data.note.id)
-    if (note) {
-      note.left = data.note.left
-      note.top = data.note.top
-    }
-  }
-
-  socket.value.on('stickyNoteCreated', onStickyNoteCreated)
-  socket.value.on('updateSticky', onUpdateSticky)
 
   return {
     stickyNotes,

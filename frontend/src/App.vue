@@ -1,8 +1,6 @@
 <template>
   <div class="container">
-
     <router-view />
-
     <footer class="sticky-footer">
       <p>© 2025 IdeaLink</p>
     </footer>
@@ -10,6 +8,33 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue';
+import { connectToWS } from './sockets/ws-client.js';
+import { initDrawing, handleExternalDrawing } from './app/drawing.js';
+import { useStickyNotes } from './composables/useStickyNotes.js';
+
+const boardID = 'index.html';
+const stickyNotes = useStickyNotes(boardID);
+
+function handleWSMessage(message) {
+  switch (message.type) {
+    case 'startDrawing':
+    case 'drawing':
+    case 'endDrawing':
+      handleExternalDrawing(message);
+      break;
+
+    // sticky notes handled inside useStickyNotes's own WS listener
+    default:
+      console.log('[WS] Unknown message type:', message.type);
+  }
+}
+
+// onMounted(() => {
+//   const { send } = connectToWS(boardID, handleWSMessage);
+
+//   initDrawing(send);
+// });
 </script>
 
 <style scoped>
@@ -18,12 +43,9 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  /* background: #5d4037; */
-  /* color: rgba(255, 255, 255, 0.75); */
-  /* color: #acac92; */
   text-align: center;
   padding: 0.8rem;
   font-size: 0.9rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-}</style>
-
+}
+</style>

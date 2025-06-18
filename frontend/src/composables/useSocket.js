@@ -1,14 +1,27 @@
 // src/composables/useSocket.js
 import { ref } from 'vue'
-import { io } from 'socket.io-client'
+import { useRoute } from 'vue-router'
+import { connectToWS } from '@/sockets/ws-client'
 
-const socket = ref(io('https://ws-idealink.onrender.com'))
+const socket = ref(null)
+const send = ref(null)
 
-const boardId = ref(window.location.pathname.split('/').pop() || 'default-board')
+const route = useRoute()
+const boardId = route.params.boardID || 'default-board'
 
 export function useSocket() {
+  if (!socket.value) {
+    const wsConnection = connectToWS(boardId, (data) => {
+      // You can handle any global incoming WS data here if needed
+      console.log('[useSocket] WS data received:', data)
+    })
+    socket.value = wsConnection.socket
+    send.value = wsConnection.send
+  }
+
   return {
     socket,
-    boardId
+    send,
+    boardId,
   }
 }

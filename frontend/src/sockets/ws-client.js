@@ -1,4 +1,3 @@
-// src/sockets/ws-client.js
 export function connectToWS(boardID, onMessageCallback) {
   const socket = new WebSocket(`wss://ws-idealink.onrender.com/${boardID}`);
 
@@ -6,10 +5,23 @@ export function connectToWS(boardID, onMessageCallback) {
     console.log(`[WS] Connected to board: ${boardID}`);
   };
 
-  socket.onmessage = (event) => {
-    console.log(`[WS] Message received: ${event.data}`);
-    if (onMessageCallback) {
-      onMessageCallback(JSON.parse(event.data));
+  socket.onmessage = async (event) => {
+    try {
+      let data;
+
+      if (event.data instanceof Blob) {
+        data = await event.data.text(); // Convert Blob to text
+      } else {
+        data = event.data;
+      }
+
+      console.log(`[WS] Message received: ${data}`);
+
+      if (onMessageCallback) {
+        onMessageCallback(JSON.parse(data));
+      }
+    } catch (e) {
+      console.error('[WS] Failed to parse message:', e);
     }
   };
 
@@ -21,10 +33,11 @@ export function connectToWS(boardID, onMessageCallback) {
     console.warn('[WS] WebSocket disconnected');
   };
 
-  // Provide send method too
   function send(data) {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(data));
+    } else {
+      console.warn('[WS] Socket not open, message not sent');
     }
   }
 

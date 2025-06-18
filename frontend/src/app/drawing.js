@@ -1,67 +1,71 @@
-let isDrawingEnabled = false;
-let isDrawing = false;
+// drawing.js
 let ctx = null;
-let canvas = null;
+let isDrawing = false;
 let isExternal = false;
+let wsSend = null;
 
-export function toggleDrawingMode() {
-  canvas = document.getElementById('drawingCanvas');
-  ctx = canvas?.getContext('2d');
-
-  if (!canvas || !ctx) return;
-
-  const button = document.getElementById('startDrawingBtn');
-
-  if (!isDrawingEnabled) {
-    enableDrawing();
-    if (button) button.textContent = "Stop Drawing";
-  } else {
-    disableDrawing();
-    if (button) button.textContent = "Start Drawing";
-  }
+export function initDrawing(sendFunction) {
+  wsSend = sendFunction;
 }
 
-function enableDrawing() {
-  isDrawingEnabled = true;
-  canvas.addEventListener('mousedown', startDrawing);
-  canvas.addEventListener('mousemove', draw);
-  canvas.addEventListener('mouseup', stopDrawing);
-  canvas.addEventListener('mouseleave', stopDrawing);
+// Call this when you want to set the canvas context, e.g., from your component
+export function setContext(context) {
+  ctx = context;
 }
 
-function disableDrawing() {
-  isDrawingEnabled = false;
-  canvas.removeEventListener('mousedown', startDrawing);
-  canvas.removeEventListener('mousemove', draw);
-  canvas.removeEventListener('mouseup', stopDrawing);
-  canvas.removeEventListener('mouseleave', stopDrawing);
-}
-
-function startDrawing(e) {
+export function startDrawing(e) {
   if (!ctx) return;
+
   isDrawing = true;
   ctx.beginPath();
   ctx.moveTo(e.offsetX, e.offsetY);
+
+  if (!isExternal && wsSend) {
+    wsSend({ type: 'startDrawing', x: e.offsetX, y: e.offsetY });
+  }
 }
 
-function draw(e) {
-  if (!ctx || !isDrawing || isExternal) return;
-  ctx.lineTo(e.offsetX, e.offsetY);
-  ctx.stroke();
+export function draw(e) {
+  if (!ctx || !isDrawing) return;
+
+  // Only draw local pointer if not external
+  if (!isExternal) {
+    ctx.lineTo(e.offsetX, e.offsetY);
+    ctx.stroke();
+
+    if (wsSend) {
+      wsSend({ type: 'drawing', x: e.offsetX, y: e.offsetY });
+    }
+  }
 }
 
-function stopDrawing() {
+export function stopDrawing() {
+  if (!isDrawing) return;
   isDrawing = false;
+
+  if (!isExternal && wsSend) {
+    wsSend({ type: 'endDrawing' });
+  }
 }
 
-export function setExternalDrawing(value) {
-  isExternal = value;
-}
+// Called when you receive WS messages for remote drawing
+export function handleExternalDrawing(message) {
+  if (!ctx) return;
 
-export function getCanvas() {
-  return canvas;
-}
+  switch (message.type) {
+    case 'startDrawing':
+      isExternal = true;
+      ctx.beginPath();
+      ctx.moveTo(message.x, message.y);
+      break;
 
-export function getContext() {
-  return ctx;
+    case 'drawing':
+      ctx.lineTo(message.x, message.y);
+      ctx.stroke();
+      break;
+
+    case 'endDrawing':
+      isExternal = false;
+      break;
+  }
 }

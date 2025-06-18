@@ -11,33 +11,46 @@
       </div>
     </header>
 
-    <div class="drawing-wrapper">
+    <div class="drawing-wrapper" style="position: relative;">
       <canvas
         id="drawingCanvas"
         ref="drawingCanvas"
         width="1200"
         height="600"
         class="drawing-canvas"
+        style="border:1px solid #ccc; display: block;"
       ></canvas>
 
-      <div id="stickyNotes" class="sticky-notes">
+      <div id="stickyNotes" class="sticky-notes" style="position: absolute; top:0; left:0; width:100%; height:100%;">
         <div
           v-for="(note, index) in stickyNotes"
           :key="note.id"
           class="sticky-note"
-          :style="{ top: note.top + 'px', left: note.left + 'px' }"
+          :style="{
+            position: 'absolute',
+            top: note.top + 'px',
+            left: note.left + 'px',
+            cursor: 'move',
+            background: '#fffec8',
+            padding: '8px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            minWidth: '150px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+          }"
           @mousedown="startDrag(note, $event)"
         >
           <textarea
             v-model="note.text"
             placeholder="Write your note here..."
             @input="onStickyNoteChange(index)"
+            style="width: 100%; height: 80px; border:none; background: transparent; resize:none; outline:none; font-family: Arial, sans-serif;"
           ></textarea>
         </div>
       </div>
     </div>
 
-    <div class="bottom-buttons fixed-buttons">
+    <div class="bottom-buttons fixed-buttons" style="margin-top: 10px;">
       <button class="btn" @click="toggleDrawing">
         <span>✏️</span>
         {{ isDrawingEnabled ? 'Stop drawing' : 'Start drawing' }}
@@ -51,28 +64,33 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { connectToWS } from '@/sockets/ws-client'
 import { useStickyNotes } from '@/composables/useStickyNotes'
 
 const router = useRouter()
 const route = useRoute()
-const boardId = route.params.boardID
+const boardId = computed(() => route.params.boardID || 'default-board')
 
 const drawingCanvas = ref(null)
 let ctx = null
+const paths = ref([])
 const isDrawing = ref(false)
 const isDrawingEnabled = ref(false)
 
-const { stickyNotes, addStickyNote, updateStickyNote, setStickyNotes } = useStickyNotes()
+const { stickyNotes, addStickyNote, updateStickyNote, resetNotes } = useStickyNotes(boardId)
 
-// Dragging sticky notes state
 let dragNote = null
 let dragOffset = { x: 0, y: 0 }
-
 let ws = null
 let sendWS = null
+
+watch(boardId, () => {
+  if (ctx) ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
+  paths.value = []
+  resetNotes()
+})
 
 function toggleDrawing() {
   isDrawingEnabled.value = !isDrawingEnabled.value
@@ -104,36 +122,27 @@ function getOffsetPos(evt) {
 }
 
 function startPath(event) {
-  if (ctx) {
-    isDrawing.value = true
-    const { x, y } = getOffsetPos(event)
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-    // Send start drawing event
-    sendWS({
-      type: 'startDrawing',
-      x, y
-    })
-  }
+  if (!ctx) return
+  isDrawing.value = true
+  const { x, y } = getOffsetPos(event)
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  paths.value.push([{ x, y }])
+  sendWS?.({ type: 'startDrawing', x, y, boardId: boardId.value })
 }
 
 function draw(event) {
-  if (isDrawing.value && ctx) {
-    const { x, y } = getOffsetPos(event)
-    ctx.lineTo(x, y)
-    ctx.stroke()
-    // Send draw event
-    sendWS({
-      type: 'drawing',
-      x, y
-    })
-  }
+  if (!isDrawing.value || !ctx) return
+  const { x, y } = getOffsetPos(event)
+  ctx.lineTo(x, y)
+  ctx.stroke()
+  paths.value[paths.value.length - 1].push({ x, y })
+  sendWS?.({ type: 'drawing', x, y, boardId: boardId.value })
 }
 
 function endDrawing() {
   isDrawing.value = false
-  // Send end drawing event
-  sendWS({ type: 'endDrawing' })
+  sendWS?.({ type: 'endDrawing', boardId: boardId.value })
 }
 
 function createNewBoard() {
@@ -142,10 +151,8 @@ function createNewBoard() {
 }
 
 function copyLink() {
-  const url = window.location.href
-  navigator.clipboard.writeText(url).then(() => {
-    alert('Board link copied to clipboard!')
-  })
+  navigator.clipboard.writeText(window.location.href)
+    .then(() => alert('Board link copied!'))
 }
 
 function addStickyNoteLocal() {
@@ -156,15 +163,13 @@ function addStickyNoteLocal() {
     left: 50
   }
   addStickyNote(newNote)
-  sendWS({ type: 'addSticky', note: newNote })
+  sendWS?.({ type: 'addSticky', note: newNote, boardId: boardId.value })
 }
 
 function onStickyNoteChange(index) {
-  // Send updated sticky note content to others
-  sendWS({ type: 'updateSticky', note: stickyNotes.value[index] })
+  sendWS?.({ type: 'updateSticky', note: stickyNotes.value[index], boardId: boardId.value })
 }
 
-// Drag handlers for sticky notes
 function startDrag(note, event) {
   dragNote = note
   dragOffset.x = event.clientX - note.left
@@ -177,9 +182,9 @@ function drag(event) {
   if (!dragNote) return
   dragNote.left = event.clientX - dragOffset.x
   dragNote.top = event.clientY - dragOffset.y
-  // Force Vue reactivity workaround (if needed)
-  updateStickyNotePosition(dragNote)
-  sendWS({ type: 'updateSticky', note: dragNote })
+  const idx = stickyNotes.value.findIndex(n => n.id === dragNote.id)
+  if (idx !== -1) updateStickyNote(idx, { top: dragNote.top, left: dragNote.left })
+  sendWS?.({ type: 'updateSticky', note: dragNote, boardId: boardId.value })
 }
 
 function stopDrag() {
@@ -188,58 +193,52 @@ function stopDrag() {
   window.removeEventListener('mouseup', stopDrag)
 }
 
-function updateStickyNotePosition(note) {
-  const idx = stickyNotes.value.findIndex(n => n.id === note.id)
-  if (idx !== -1) {
-    updateStickyNote(idx, { top: note.top, left: note.left })
-  }
-}
-
-// Handle incoming WS messages to sync drawing and sticky notes
 function handleWSMessage(data) {
-  switch(data.type) {
-    case 'addSticky':
-      // Avoid duplicates
-      if (!stickyNotes.value.find(n => n.id === data.note.id)) {
-        addStickyNote(data.note)
+  if (!data || data.boardId !== boardId.value) return
+  switch (data.type) {
+    case 'fullState':
+      stickyNotes.value.splice(0, stickyNotes.value.length, ...data.notes)
+      if (ctx && data.paths) {
+        ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
+        data.paths.forEach(path => {
+          ctx.beginPath()
+          path.forEach((point, i) => {
+            if (i === 0) ctx.moveTo(point.x, point.y)
+            else ctx.lineTo(point.x, point.y)
+          })
+          ctx.stroke()
+        })
       }
-      break;
+      break
+    case 'addSticky':
+      if (!stickyNotes.value.find(n => n.id === data.note.id)) addStickyNote(data.note)
+      break
     case 'updateSticky':
       const idx = stickyNotes.value.findIndex(n => n.id === data.note.id)
-      if (idx !== -1) {
-        updateStickyNote(idx, data.note)
-      }
-      break;
+      if (idx !== -1) updateStickyNote(idx, data.note)
+      break
     case 'startDrawing':
-      if (ctx) {
-        ctx.beginPath()
-        ctx.moveTo(data.x, data.y)
-      }
-      break;
+      if (ctx) ctx.beginPath(), ctx.moveTo(data.x, data.y)
+      break
     case 'drawing':
-      if (ctx) {
-        ctx.lineTo(data.x, data.y)
-        ctx.stroke()
-      }
-      break;
+      if (ctx) ctx.lineTo(data.x, data.y), ctx.stroke()
+      break
     case 'endDrawing':
-      // nothing special, just end path
-      break;
+      break
   }
 }
 
 onMounted(() => {
-  const { socket, send } = connectToWS(boardId, handleWSMessage)
+  const { socket, send } = connectToWS(boardId.value, handleWSMessage)
   ws = socket
   sendWS = send
 })
 
 onBeforeUnmount(() => {
-  if (ws) {
-    ws.close()
-  }
+  if (ws) ws.close()
 })
 </script>
+
 
 <style scoped>
 .board-container {
