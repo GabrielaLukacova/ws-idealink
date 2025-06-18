@@ -1,20 +1,32 @@
-export function connectToWS(boardID) {
-    const socket = new WebSocket(`ws://localhost:3001/${boardID}`);
-  
-    socket.onopen = () => {
-      console.log('WebSocket connected');
-    };
-  
-    socket.onmessage = (event) => {
-      console.log('[WS] Incoming:', event.data);
-      // Here you will call drawSync or addRemoteStickyNote later
-    };
-  
-    socket.onerror = (err) => {
-      console.error('WebSocket error:', err);
-    };
+// src/sockets/ws-client.js
+export function connectToWS(boardID, onMessageCallback) {
+  const socket = new WebSocket(`wss://ws-idealink.onrender.com/${boardID}`);
+
+  socket.onopen = () => {
+    console.log(`[WS] Connected to board: ${boardID}`);
+  };
+
+  socket.onmessage = (event) => {
+    console.log(`[WS] Message received: ${event.data}`);
+    if (onMessageCallback) {
+      onMessageCallback(JSON.parse(event.data));
+    }
+  };
+
+  socket.onerror = (error) => {
+    console.error('[WS] WebSocket error:', error);
+  };
+
+  socket.onclose = () => {
+    console.warn('[WS] WebSocket disconnected');
+  };
+
+  // Provide send method too
+  function send(data) {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(data));
+    }
   }
-  
-  export function connectToWS(boardID) {
-    const socket = new WebSocket(`wss://your-backend.onrender.com/${boardID}`);
-  }
+
+  return { socket, send };
+}

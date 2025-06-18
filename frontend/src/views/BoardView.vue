@@ -1,103 +1,357 @@
-<!-- src/views/BoardView.vue -->
 <template>
-    <div class="board">
-      <!-- Sticky Notes Section -->
-      <div class="sticky-notes-container">
-        <button class="btn" @click="addStickyNote">Add Sticky Note</button>
-        <div id="stickyNotes" class="sticky-notes">
-          <div
-            v-for="(note, index) in stickyNotes"
-            :key="index"
-            class="sticky-note"
-            :style="{ top: note.top + 'px', left: note.left + 'px' }"
-            @mousedown="startDrag(note, $event)"
-          >
-            <textarea v-model="note.text" placeholder="Write your note here..."></textarea>
-          </div>
+  <div class="board-container">
+    <header>
+      <div class="header-title">
+        <h1 @click="createNewBoard" style="cursor:pointer">IdeaLink</h1>
+        <p>Collaborate with others in real-time</p>
+      </div>
+      <div class="header-buttons">
+        <button class="btn" @click="createNewBoard">+ New board</button>
+        <button class="btn" @click="copyLink">Copy link</button>
+      </div>
+    </header>
+
+    <div class="drawing-wrapper">
+      <canvas
+        id="drawingCanvas"
+        ref="drawingCanvas"
+        width="1200"
+        height="600"
+        class="drawing-canvas"
+      ></canvas>
+
+      <div id="stickyNotes" class="sticky-notes">
+        <div
+          v-for="(note, index) in stickyNotes"
+          :key="note.id"
+          class="sticky-note"
+          :style="{ top: note.top + 'px', left: note.left + 'px' }"
+          @mousedown="startDrag(note, $event)"
+        >
+          <textarea
+            v-model="note.text"
+            placeholder="Write your note here..."
+            @input="onStickyNoteChange(index)"
+          ></textarea>
         </div>
       </div>
-  
-      <!-- Drawing Canvas -->
-      <div class="drawing-container">
-        <button class="btn" @click="startDrawing">Start Drawing</button>
-        <canvas
-          id="drawingCanvas"
-          ref="drawingCanvas"
-          width="800"
-          height="500"
-          class="drawing-canvas"
-        ></canvas>
-      </div>
     </div>
-  </template>
-  
-  <script setup>
-  import { ref, onMounted } from 'vue'
-  import { useRoute } from 'vue-router'
-  import { connectToWS } from '@/sockets/ws-client'
-  
-  const route = useRoute()
-  const boardId = route.params.boardID
-  
-  const stickyNotes = ref([])
-  const isDrawing = ref(false)
-  const drawingCanvas = ref(null)
-  let ctx = null
-  
-  function addStickyNote() {
-    stickyNotes.value.push({
-      text: '',
-      top: 100,
-      left: 100
-    })
-  }
-  
-  function startDrawing() {
-    const canvas = drawingCanvas.value
+
+    <div class="bottom-buttons fixed-buttons">
+      <button class="btn" @click="toggleDrawing">
+        <span>✏️</span>
+        {{ isDrawingEnabled ? 'Stop drawing' : 'Start drawing' }}
+      </button>
+      <button class="btn" @click="addStickyNoteLocal">
+        <span>🗒️</span>
+        Add sticky note
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { connectToWS } from '@/sockets/ws-client'
+import { useStickyNotes } from '@/composables/useStickyNotes'
+
+const router = useRouter()
+const route = useRoute()
+const boardId = route.params.boardID
+
+const drawingCanvas = ref(null)
+let ctx = null
+const isDrawing = ref(false)
+const isDrawingEnabled = ref(false)
+
+const { stickyNotes, addStickyNote, updateStickyNote, setStickyNotes } = useStickyNotes()
+
+// Dragging sticky notes state
+let dragNote = null
+let dragOffset = { x: 0, y: 0 }
+
+let ws = null
+let sendWS = null
+
+function toggleDrawing() {
+  isDrawingEnabled.value = !isDrawingEnabled.value
+  const canvas = drawingCanvas.value
+  if (!canvas) return
+
+  if (isDrawingEnabled.value) {
     ctx = canvas.getContext('2d')
-    isDrawing.value = true
-  
     canvas.addEventListener('mousedown', startPath)
     canvas.addEventListener('mousemove', draw)
     canvas.addEventListener('mouseup', endDrawing)
     canvas.addEventListener('mouseleave', endDrawing)
+  } else {
+    canvas.removeEventListener('mousedown', startPath)
+    canvas.removeEventListener('mousemove', draw)
+    canvas.removeEventListener('mouseup', endDrawing)
+    canvas.removeEventListener('mouseleave', endDrawing)
   }
-  
-  function startPath(event) {
-    if (ctx) {
-      ctx.beginPath()
-      ctx.moveTo(event.offsetX, event.offsetY)
-    }
+}
+
+function getOffsetPos(evt) {
+  const rect = drawingCanvas.value.getBoundingClientRect()
+  const scaleX = drawingCanvas.value.width / rect.width
+  const scaleY = drawingCanvas.value.height / rect.height
+  return {
+    x: (evt.clientX - rect.left) * scaleX,
+    y: (evt.clientY - rect.top) * scaleY
   }
-  
-  function draw(event) {
-    if (isDrawing.value && ctx) {
-      ctx.lineTo(event.offsetX, event.offsetY)
-      ctx.stroke()
-    }
-  }
-  
-  function endDrawing() {
-    isDrawing.value = false
-  }
-  
-  function startDrag(note, event) {
-    const offsetX = event.clientX - note.left
-    const offsetY = event.clientY - note.top
-  
-    const moveNote = (moveEvent) => {
-      note.left = moveEvent.clientX - offsetX
-      note.top = moveEvent.clientY - offsetY
-    }
-  
-    document.addEventListener('mousemove', moveNote)
-    document.addEventListener('mouseup', () => {
-      document.removeEventListener('mousemove', moveNote)
+}
+
+function startPath(event) {
+  if (ctx) {
+    isDrawing.value = true
+    const { x, y } = getOffsetPos(event)
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    // Send start drawing event
+    sendWS({
+      type: 'startDrawing',
+      x, y
     })
   }
-  
-  onMounted(() => {
-    connectToWS(boardId)
+}
+
+function draw(event) {
+  if (isDrawing.value && ctx) {
+    const { x, y } = getOffsetPos(event)
+    ctx.lineTo(x, y)
+    ctx.stroke()
+    // Send draw event
+    sendWS({
+      type: 'drawing',
+      x, y
+    })
+  }
+}
+
+function endDrawing() {
+  isDrawing.value = false
+  // Send end drawing event
+  sendWS({ type: 'endDrawing' })
+}
+
+function createNewBoard() {
+  const id = Math.random().toString(36).substring(2, 8)
+  router.push(`/${id}`)
+}
+
+function copyLink() {
+  const url = window.location.href
+  navigator.clipboard.writeText(url).then(() => {
+    alert('Board link copied to clipboard!')
   })
-  </script>
-  
+}
+
+function addStickyNoteLocal() {
+  const newNote = {
+    id: Date.now().toString(),
+    text: '',
+    top: 50,
+    left: 50
+  }
+  addStickyNote(newNote)
+  sendWS({ type: 'addSticky', note: newNote })
+}
+
+function onStickyNoteChange(index) {
+  // Send updated sticky note content to others
+  sendWS({ type: 'updateSticky', note: stickyNotes.value[index] })
+}
+
+// Drag handlers for sticky notes
+function startDrag(note, event) {
+  dragNote = note
+  dragOffset.x = event.clientX - note.left
+  dragOffset.y = event.clientY - note.top
+  window.addEventListener('mousemove', drag)
+  window.addEventListener('mouseup', stopDrag)
+}
+
+function drag(event) {
+  if (!dragNote) return
+  dragNote.left = event.clientX - dragOffset.x
+  dragNote.top = event.clientY - dragOffset.y
+  // Force Vue reactivity workaround (if needed)
+  updateStickyNotePosition(dragNote)
+  sendWS({ type: 'updateSticky', note: dragNote })
+}
+
+function stopDrag() {
+  dragNote = null
+  window.removeEventListener('mousemove', drag)
+  window.removeEventListener('mouseup', stopDrag)
+}
+
+function updateStickyNotePosition(note) {
+  const idx = stickyNotes.value.findIndex(n => n.id === note.id)
+  if (idx !== -1) {
+    updateStickyNote(idx, { top: note.top, left: note.left })
+  }
+}
+
+// Handle incoming WS messages to sync drawing and sticky notes
+function handleWSMessage(data) {
+  switch(data.type) {
+    case 'addSticky':
+      // Avoid duplicates
+      if (!stickyNotes.value.find(n => n.id === data.note.id)) {
+        addStickyNote(data.note)
+      }
+      break;
+    case 'updateSticky':
+      const idx = stickyNotes.value.findIndex(n => n.id === data.note.id)
+      if (idx !== -1) {
+        updateStickyNote(idx, data.note)
+      }
+      break;
+    case 'startDrawing':
+      if (ctx) {
+        ctx.beginPath()
+        ctx.moveTo(data.x, data.y)
+      }
+      break;
+    case 'drawing':
+      if (ctx) {
+        ctx.lineTo(data.x, data.y)
+        ctx.stroke()
+      }
+      break;
+    case 'endDrawing':
+      // nothing special, just end path
+      break;
+  }
+}
+
+onMounted(() => {
+  const { socket, send } = connectToWS(boardId, handleWSMessage)
+  ws = socket
+  sendWS = send
+})
+
+onBeforeUnmount(() => {
+  if (ws) {
+    ws.close()
+  }
+})
+</script>
+
+<style scoped>
+.board-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+header {
+  position: relative;        
+  padding: 2rem;
+  color: #acac92;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; 
+  gap: 1rem;
+}
+
+.header-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none; 
+  user-select: none;
+  width: max-content;  
+}
+
+.header-title * {
+  pointer-events: auto; 
+  user-select: auto;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.drawing-wrapper {
+  position: relative;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.drawing-canvas {
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  border: none;
+  display: block;
+}
+
+.sticky-notes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sticky-note {
+  background-color: #fff59d;
+  padding: 10px;
+  border-radius: 8px;
+  width: 180px;
+  min-height: 140px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  position: absolute;
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.sticky-note textarea {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: none;
+  font-size: 1rem;
+  color: #333;
+  resize: none;
+  outline: none;
+}
+
+.fixed-buttons {
+  position: fixed;
+  bottom: 3rem;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: transparent;
+  z-index: 10;
+}
+
+.btn {
+  background-color: #acac92;
+  color: white;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.btn:hover {
+  background-color: #9b9b7b;
+  transform: translateY(-1px);
+}
+</style>

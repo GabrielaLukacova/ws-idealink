@@ -2,11 +2,24 @@ const http = require('http')
 const WebSocket = require('ws')
 const url = require('url')
 
+// Allowed origin
+const ALLOWED_ORIGIN = 'https://gabrielalukacova.dk'
+
 const PORT = process.env.PORT || 3000
-const rooms = new Map() 
+const rooms = new Map()
 
 const server = http.createServer((req, res) => {
-  res.writeHead(200)
+  // Handle preflight requests and set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204)
+    res.end()
+    return
+  }
+
+  res.writeHead(200, { 'Content-Type': 'text/plain' })
   res.end('WebSocket server is running.')
 })
 
@@ -41,7 +54,7 @@ wss.on('connection', (ws, req) => {
   })
 })
 
-// Ping every 30s to keep connections alive
+// Ping clients to keep them alive
 setInterval(() => {
   wss.clients.forEach((ws) => {
     if (!ws.isAlive) return ws.terminate()
@@ -51,5 +64,5 @@ setInterval(() => {
 }, 30000)
 
 server.listen(PORT, () => {
-  console.log(`WebSocket Server running on :${PORT}`)
+  console.log(`WebSocket Server running on port ${PORT}`)
 })
