@@ -10,7 +10,7 @@ export function useStickyNotes(boardId) {
 
   // Handle messages from WS
   function onMessage(data) {
-    if (!data || data.boardId !== boardId) return
+    if (!data || data.boardId !== boardId.value) return
 
     if (data.type === 'stickyNoteCreated') {
       if (!stickyNotes.value.find(n => n.id === data.note.id)) {
@@ -74,8 +74,8 @@ export function useStickyNotes(boardId) {
 
       wsSend && wsSend({
         type: 'updateSticky',
-        boardId,
-        note: {
+        boardId: boardId.value,
+          note: {
           id: note.id,
           left: note.left,
           top: note.top,

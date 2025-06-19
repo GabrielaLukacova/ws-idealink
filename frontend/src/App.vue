@@ -8,12 +8,15 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
+import { onMounted, computed} from 'vue';
 import { connectToWS } from './sockets/ws-client.js';
 import { initDrawing, handleExternalDrawing } from './app/drawing.js';
 import { useStickyNotes } from './composables/useStickyNotes.js';
+import { useRoute } from 'vue-router'
 
-const boardID = 'index.html';
+
+const route = useRoute()
+const boardID = computed(() => route.params.boardID || 'default-board')
 const stickyNotes = useStickyNotes(boardID);
 
 function handleWSMessage(message) {

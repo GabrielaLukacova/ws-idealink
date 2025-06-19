@@ -71,7 +71,8 @@ const { stickyNotes, addStickyNote, updateStickyNote, resetNotes } = useStickyNo
 let dragNote = null
 let dragOffset = { x: 0, y: 0 }
 let ws = null
-let sendWS = () => {} // default noop function
+let sendWS = () => {} // default noop
+let pendingFullState = null
 
 watch(boardId, () => {
   if (ctx) ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
@@ -180,31 +181,40 @@ function stopDrag() {
   window.removeEventListener('mouseup', stopDrag)
 }
 
+function renderFullState(data) {
+  stickyNotes.value.splice(0, stickyNotes.value.length, ...data.notes)
+  paths.value = data.paths || []
+  if (!ctx) return
+
+  ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
+  data.paths.forEach(path => {
+    ctx.beginPath()
+    path.forEach((point, i) => {
+      if (i === 0) ctx.moveTo(point.x, point.y)
+      else ctx.lineTo(point.x, point.y)
+    })
+    ctx.stroke()
+  })
+}
+
 function handleWSMessage(data) {
   if (!data || data.boardId !== boardId.value) return
   switch (data.type) {
     case 'fullState':
-      stickyNotes.value.splice(0, stickyNotes.value.length, ...data.notes)
-      paths.value = data.paths || []
-      if (ctx && data.paths) {
-        ctx.clearRect(0, 0, drawingCanvas.value.width, drawingCanvas.value.height)
-        data.paths.forEach(path => {
-          ctx.beginPath()
-          path.forEach((point, i) => {
-            if (i === 0) ctx.moveTo(point.x, point.y)
-            else ctx.lineTo(point.x, point.y)
-          })
-          ctx.stroke()
-        })
+      if (!ctx) {
+        pendingFullState = data
+        return
       }
+      renderFullState(data)
       break
     case 'addSticky':
       if (!stickyNotes.value.find(n => n.id === data.note.id)) addStickyNote(data.note)
       break
-    case 'updateSticky':
+    case 'updateSticky': {
       const idx = stickyNotes.value.findIndex(n => n.id === data.note.id)
       if (idx !== -1) updateStickyNote(idx, data.note)
       break
+    }
     case 'startDrawing':
       if (ctx) ctx.beginPath(), ctx.moveTo(data.x, data.y)
       break
@@ -219,11 +229,30 @@ function handleWSMessage(data) {
 onMounted(() => {
   const { socket, send } = connectToWS(boardId.value, handleWSMessage)
   ws = socket
-  sendWS = send
+
+  if (socket.readyState === WebSocket.OPEN) {
+    sendWS = send
+  } else {
+    socket.addEventListener('open', () => {
+      sendWS = send
+      if (pendingFullState) {
+        renderFullState(pendingFullState)
+        pendingFullState = null
+      }
+      console.log('[WS] ✅ sendWS is now ready to use')
+    })
+  }
 })
 
 onBeforeUnmount(() => {
   if (ws) ws.close()
+})
+
+watch(isDrawingEnabled, (enabled) => {
+  if (enabled && ctx && pendingFullState) {
+    renderFullState(pendingFullState)
+    pendingFullState = null
+  }
 })
 </script>
 
