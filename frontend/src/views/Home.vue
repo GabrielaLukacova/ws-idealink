@@ -1,4 +1,3 @@
-<!-- src/views/Home.vue -->
 <template>
   <div class="home">
     <header>

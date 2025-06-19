@@ -8,36 +8,34 @@
 </template>
 
 <script setup>
-import { onMounted, computed} from 'vue';
-import { connectToWS } from './sockets/ws-client.js';
-import { initDrawing, handleExternalDrawing } from './app/drawing.js';
-import { useStickyNotes } from './composables/useStickyNotes.js';
+import { onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { connectToWS } from '@/sockets/ws-client'
+import { initDrawing, handleExternalDrawing } from '@/app/drawing'
+import { useStickyNotes } from '@/composables/useStickyNotes'
 
-
+// Get board ID from route
 const route = useRoute()
 const boardID = computed(() => route.params.boardID || 'default-board')
-const stickyNotes = useStickyNotes(boardID);
 
+// Reactive sticky note state for current board
+const { stickyNotes } = useStickyNotes(boardID)
+
+// Handle incoming WebSocket messages
 function handleWSMessage(message) {
-  switch (message.type) {
-    case 'startDrawing':
-    case 'drawing':
-    case 'endDrawing':
-      handleExternalDrawing(message);
-      break;
-
-    // sticky notes handled inside useStickyNotes's own WS listener
-    default:
-      console.log('[WS] Unknown message type:', message.type);
+  if (!message) return
+  if (['startDrawing', 'drawing', 'endDrawing'].includes(message.type)) {
+    handleExternalDrawing(message)
+  } else {
+    console.log('[WS] Unknown message type:', message.type)
   }
 }
 
-// onMounted(() => {
-//   const { send } = connectToWS(boardId.value, handleWSMessage);
-
-//   initDrawing(send);
-// });
+// connect to websocket + initialize drawing
+onMounted(() => {
+  const { send } = connectToWS(boardID.value, handleWSMessage)
+  initDrawing(send)
+})
 </script>
 
 <style scoped>

@@ -6,7 +6,7 @@
         <p>Collaborate with others in real-time</p>
       </div>
       <div class="header-buttons">
-        <button class="btn" @click="createNewBoard">+ New board</button>
+        <button class="btn" @click="createNewBoard">New board</button>
         <button class="btn" @click="copyLink">Copy link</button>
       </div>
     </header>
@@ -39,11 +39,9 @@
 
     <div class="bottom-buttons fixed-buttons">
       <button class="btn" @click="toggleDrawing">
-        <span>✏️</span>
         {{ isDrawingEnabled ? 'Stop drawing' : 'Start drawing' }}
       </button>
       <button class="btn" @click="addStickyNoteLocal">
-        <span>🗒️</span>
         Add sticky note
       </button>
     </div>
@@ -56,22 +54,28 @@ import { useRoute, useRouter } from 'vue-router'
 import { connectToWS } from '@/sockets/ws-client'
 import { useStickyNotes } from '@/composables/useStickyNotes'
 
+// Routing setup
 const router = useRouter()
 const route = useRoute()
 const boardId = computed(() => route.params.boardID || 'default-board')
 
+// Canvas & drawing state
 const drawingCanvas = ref(null)
 let ctx = null
 const paths = ref([])
 const isDrawing = ref(false)
 const isDrawingEnabled = ref(false)
 
+// Sticky note state
 const { stickyNotes, addStickyNote, updateStickyNote, resetNotes } = useStickyNotes(boardId)
 
+// Drag state
 let dragNote = null
 let dragOffset = { x: 0, y: 0 }
+
+// WebSocket state
 let ws = null
-let sendWS = () => {} // default noop
+let sendWS = () => {}
 let pendingFullState = null
 
 watch(boardId, () => {
@@ -80,6 +84,7 @@ watch(boardId, () => {
   resetNotes()
 })
 
+// Drawing toggling
 function toggleDrawing() {
   isDrawingEnabled.value = !isDrawingEnabled.value
   const canvas = drawingCanvas.value
@@ -99,6 +104,7 @@ function toggleDrawing() {
   }
 }
 
+// Convert mouse to canvas coordinates
 function getOffsetPos(evt) {
   const rect = drawingCanvas.value.getBoundingClientRect()
   const scaleX = drawingCanvas.value.width / rect.width
@@ -109,6 +115,7 @@ function getOffsetPos(evt) {
   }
 }
 
+// Drawing handlers
 function startPath(event) {
   if (!ctx) return
   isDrawing.value = true
@@ -129,20 +136,12 @@ function draw(event) {
 }
 
 function endDrawing() {
+  if (!isDrawing.value) return
   isDrawing.value = false
   sendWS({ type: 'endDrawing', boardId: boardId.value })
 }
 
-function createNewBoard() {
-  const id = Math.random().toString(36).substring(2, 8)
-  router.push(`/${id}`)
-}
-
-function copyLink() {
-  navigator.clipboard.writeText(window.location.href)
-    .then(() => alert('Board link copied!'))
-}
-
+// Sticky notes
 function addStickyNoteLocal() {
   const newNote = {
     id: Date.now().toString(),
@@ -158,6 +157,7 @@ function onStickyNoteChange(index) {
   sendWS({ type: 'updateSticky', note: stickyNotes.value[index], boardId: boardId.value })
 }
 
+// Dragging logic
 function startDrag(note, event) {
   dragNote = note
   dragOffset.x = event.clientX - note.left
@@ -181,6 +181,7 @@ function stopDrag() {
   window.removeEventListener('mouseup', stopDrag)
 }
 
+// Render state from WS
 function renderFullState(data) {
   stickyNotes.value.splice(0, stickyNotes.value.length, ...data.notes)
   paths.value = data.paths || []
@@ -197,15 +198,16 @@ function renderFullState(data) {
   })
 }
 
+// WebSocket message handler
 function handleWSMessage(data) {
   if (!data || data.boardId !== boardId.value) return
   switch (data.type) {
     case 'fullState':
       if (!ctx) {
         pendingFullState = data
-        return
+      } else {
+        renderFullState(data)
       }
-      renderFullState(data)
       break
     case 'addSticky':
       if (!stickyNotes.value.find(n => n.id === data.note.id)) addStickyNote(data.note)
@@ -216,16 +218,23 @@ function handleWSMessage(data) {
       break
     }
     case 'startDrawing':
-      if (ctx) ctx.beginPath(), ctx.moveTo(data.x, data.y)
+      if (ctx) {
+        ctx.beginPath()
+        ctx.moveTo(data.x, data.y)
+      }
       break
     case 'drawing':
-      if (ctx) ctx.lineTo(data.x, data.y), ctx.stroke()
+      if (ctx) {
+        ctx.lineTo(data.x, data.y)
+        ctx.stroke()
+      }
       break
     case 'endDrawing':
       break
   }
 }
 
+// Connect WebSocket on mount
 onMounted(() => {
   const { socket, send } = connectToWS(boardId.value, handleWSMessage)
   ws = socket
@@ -239,15 +248,18 @@ onMounted(() => {
         renderFullState(pendingFullState)
         pendingFullState = null
       }
-      console.log('[WS] ✅ sendWS is now ready to use')
     })
   }
+
+  ctx = drawingCanvas.value?.getContext('2d')
 })
 
+// Cleanup
 onBeforeUnmount(() => {
   if (ws) ws.close()
 })
 
+// Ensure fullState is rendered if drawing mode was toggled late
 watch(isDrawingEnabled, (enabled) => {
   if (enabled && ctx && pendingFullState) {
     renderFullState(pendingFullState)
@@ -255,8 +267,6 @@ watch(isDrawingEnabled, (enabled) => {
   }
 })
 </script>
-
-
 
 
 <style scoped>
